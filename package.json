@@ -1,5 +1,5 @@
 {
-  "name": "protobufjs",
+  "name": "@arista/protobufjs",
   "version": "6.10.2",
   "versionScheme": "~",
   "description": "Protocol Buffers for JavaScript (& TypeScript).",

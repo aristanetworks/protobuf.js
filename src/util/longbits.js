@@ -1,8 +1,6 @@
 "use strict";
 module.exports = LongBits;
 
-var util = require("../util/minimal");
-
 /**
  * Constructs new long bits.
  * @classdesc Helper class for working with the low and high bits of a 64 bit value.
@@ -109,7 +107,7 @@ LongBits.from = function from(value) {
     if (typeof value === "bigint") {
         return LongBits.fromBigInt(value);
     }
-    if (util.isString(value)) {
+    if (typeof value === "string" || value instanceof String) {
         return LongBits.fromBigInt(BigInt(value));
     }
     return value.low || value.high ? new LongBits(value.low >>> 0, value.high >>> 0) : zero;

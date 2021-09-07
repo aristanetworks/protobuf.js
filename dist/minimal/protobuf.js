@@ -1,6 +1,6 @@
 /*!
- * protobuf.js v6.10.2 (c) 2016, daniel wirtz
- * compiled tue, 09 mar 2021 14:56:17 utc
+ * protobuf.js v6.11.0 (c) 2016, daniel wirtz
+ * compiled tue, 07 sep 2021 22:11:49 utc
  * licensed under the bsd-3-clause license
  * see: https://github.com/dcodeio/protobuf.js for details
  */
@@ -1326,7 +1326,7 @@ module.exports = {};
 /**
  * Named roots.
  * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
- * Can also be used manually to make roots available accross modules.
+ * Can also be used manually to make roots available across modules.
  * @name roots
  * @type {Object.<string,Root>}
  * @example
@@ -1525,8 +1525,6 @@ Service.prototype.end = function end(endedByRPC) {
 "use strict";
 module.exports = LongBits;
 
-var util = require(15);
-
 /**
  * Constructs new long bits.
  * @classdesc Helper class for working with the low and high bits of a 64 bit value.
@@ -1633,7 +1631,7 @@ LongBits.from = function from(value) {
     if (typeof value === "bigint") {
         return LongBits.fromBigInt(value);
     }
-    if (util.isString(value)) {
+    if (typeof value === "string" || value instanceof String) {
         return LongBits.fromBigInt(BigInt(value));
     }
     return value.low || value.high ? new LongBits(value.low >>> 0, value.high >>> 0) : zero;
@@ -1704,7 +1702,7 @@ LongBits.prototype.length = function length() {
          : part2 < 128 ? 9 : 10;
 };
 
-},{"15":15}],15:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 "use strict";
 var util = exports;
 

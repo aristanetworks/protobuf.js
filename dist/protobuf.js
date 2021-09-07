@@ -1,6 +1,6 @@
 /*!
- * protobuf.js v6.10.2 (c) 2016, daniel wirtz
- * compiled tue, 09 mar 2021 14:56:17 utc
+ * protobuf.js v6.11.0 (c) 2016, daniel wirtz
+ * compiled tue, 07 sep 2021 22:11:49 utc
  * licensed under the bsd-3-clause license
  * see: https://github.com/dcodeio/protobuf.js for details
  */
@@ -304,7 +304,7 @@ function codegen(functionParams, functionName) {
             return "%";
         });
         if (formatOffset !== formatParams.length)
-            throw Error("parameter count mismatch: "+formatStringOrScope);
+            throw Error("parameter count mismatch");
         body.push(formatStringOrScope);
         return Codegen;
     }
@@ -2298,6 +2298,9 @@ function Field(name, id, type, rule, extend, options, comment) {
      * Field rule, if any.
      * @type {string|undefined}
      */
+    if (rule === "proto3_optional") {
+        rule = "optional";
+    }
     this.rule = rule && rule !== "optional" ? rule : undefined; // toJSON
 
     /**
@@ -4371,9 +4374,17 @@ function parse(source, root, options) {
                     break;
 
                 case "required":
-                case "optional":
                 case "repeated":
                     parseField(type, token);
+                    break;
+
+                case "optional":
+                    /* istanbul ignore if */
+                    if (isProto3) {
+                        parseField(type, "proto3_optional");
+                    } else {
+                        parseField(type, "optional");
+                    }
                     break;
 
                 case "oneof":
@@ -4434,7 +4445,16 @@ function parse(source, root, options) {
         }, function parseField_line() {
             parseInlineOptions(field);
         });
-        parent.add(field);
+
+        if (rule === "proto3_optional") {
+            // for proto3 optional fields, we create a single-member Oneof to mimic "optional" behavior
+            var oneof = new OneOf("_" + name);
+            field.setOption("proto3_optional", true);
+            oneof.add(field);
+            parent.add(oneof);
+        } else {
+            parent.add(field);
+        }
 
         // JSON defaults to packed=true if not set so we have to set packed=false explicity when
         // parsing proto2 descriptors without the option, where applicable. This must be done for
@@ -4468,9 +4488,17 @@ function parse(source, root, options) {
                     break;
 
                 case "required":
-                case "optional":
                 case "repeated":
                     parseField(type, token);
+                    break;
+
+                case "optional":
+                    /* istanbul ignore if */
+                    if (isProto3) {
+                        parseField(type, "proto3_optional");
+                    } else {
+                        parseField(type, "optional");
+                    }
                     break;
 
                 /* istanbul ignore next */
@@ -4632,7 +4660,23 @@ function parse(source, root, options) {
                     skip(":");
                     if (peek() === "{")
                         value = parseOptionValue(parent, name + "." + token);
-                    else {
+                    else if (peek() === "[") {
+                        // option (my_option) = {
+                        //     repeated_value: [ "foo", "bar" ]
+                        // };
+                        value = [];
+                        var lastValue;
+                        if (skip("[", true)) {
+                            do {
+                                lastValue = readValue(true);
+                                value.push(lastValue);
+                            } while (skip(",", true));
+                            skip("]");
+                            if (typeof lastValue !== "undefined") {
+                                setOption(parent, name + "." + token, lastValue);
+                            }
+                        }
+                    } else {
                         value = readValue(true);
                         setOption(parent, name + "." + token, value);
                     }
@@ -4641,7 +4685,7 @@ function parse(source, root, options) {
                 if (prevValue)
                     value = [].concat(prevValue).concat(value);
                 result[propName] = value;
-                skip(",", true);
+                skip(",", true) || skip(";", true);
             }
             return result;
         }
@@ -4754,8 +4798,16 @@ function parse(source, root, options) {
 
                 case "required":
                 case "repeated":
-                case "optional":
                     parseField(parent, token, reference);
+                    break;
+
+                case "optional":
+                    /* istanbul ignore if */
+                    if (isProto3) {
+                        parseField(parent, "proto3_optional", reference);
+                    } else {
+                        parseField(parent, "optional", reference);
+                    }
                     break;
 
                 default:
@@ -5671,7 +5723,7 @@ module.exports = {};
 /**
  * Named roots.
  * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
- * Can also be used manually to make roots available accross modules.
+ * Can also be used manually to make roots available across modules.
  * @name roots
  * @type {Object.<string,Root>}
  * @example
@@ -6141,11 +6193,8 @@ function tokenize(source, alternateCommentMode) {
     var offset = 0,
         length = source.length,
         line = 1,
-        commentType = null,
-        commentText = null,
-        commentLine = 0,
-        commentLineEmpty = false,
-        commentIsLeading = false;
+        lastCommentLine = 0,
+        comments = {};
 
     var stack = [];
 
@@ -6198,10 +6247,11 @@ function tokenize(source, alternateCommentMode) {
      * @inner
      */
     function setComment(start, end, isLeading) {
-        commentType = source.charAt(start++);
-        commentLine = line;
-        commentLineEmpty = false;
-        commentIsLeading = isLeading;
+        var comment = {
+            type: source.charAt(start++),
+            lineEmpty: false,
+            leading: isLeading,
+        };
         var lookback;
         if (alternateCommentMode) {
             lookback = 2;  // alternate comment parsing: "//" or "/*"
@@ -6213,7 +6263,7 @@ function tokenize(source, alternateCommentMode) {
         do {
             if (--commentOffset < 0 ||
                     (c = source.charAt(commentOffset)) === "\n") {
-                commentLineEmpty = true;
+                comment.lineEmpty = true;
                 break;
             }
         } while (c === " " || c === "\t");
@@ -6224,9 +6274,12 @@ function tokenize(source, alternateCommentMode) {
             lines[i] = lines[i]
                 .replace(alternateCommentMode ? setCommentAltRe : setCommentRe, "")
                 .trim();
-        commentText = lines
+        comment.text = lines
             .join("\n")
             .trim();
+
+        comments[line] = comment;
+        lastCommentLine = line;
     }
 
     function isDoubleSlashCommentLine(startOffset) {
@@ -6295,6 +6348,9 @@ function tokenize(source, alternateCommentMode) {
                         ++offset;
                         if (isDoc) {
                             setComment(start, offset - 1, isLeadingComment);
+                            // Trailing comment cannot not be multi-line,
+                            // so leading comment state should be reset to handle potential next comments
+                            isLeadingComment = true;
                         }
                         ++line;
                         repeat = true;
@@ -6310,12 +6366,17 @@ function tokenize(source, alternateCommentMode) {
                                     break;
                                 }
                                 offset++;
+                                if (!isLeadingComment) {
+                                    // Trailing comment cannot not be multi-line
+                                    break;
+                                }
                             } while (isDoubleSlashCommentLine(offset));
                         } else {
                             offset = Math.min(length, findEndOfLine(offset) + 1);
                         }
                         if (isDoc) {
                             setComment(start, offset, isLeadingComment);
+                            isLeadingComment = true;
                         }
                         line++;
                         repeat = true;
@@ -6337,6 +6398,7 @@ function tokenize(source, alternateCommentMode) {
                     ++offset;
                     if (isDoc) {
                         setComment(start, offset - 2, isLeadingComment);
+                        isLeadingComment = true;
                     }
                     repeat = true;
                 } else {
@@ -6412,17 +6474,22 @@ function tokenize(source, alternateCommentMode) {
      */
     function cmnt(trailingLine) {
         var ret = null;
+        var comment;
         if (trailingLine === undefined) {
-            if (commentLine === line - 1 && (alternateCommentMode || commentType === "*" || commentLineEmpty)) {
-                ret = commentIsLeading ? commentText : null;
+            comment = comments[line - 1];
+            delete comments[line - 1];
+            if (comment && (alternateCommentMode || comment.type === "*" || comment.lineEmpty)) {
+                ret = comment.leading ? comment.text : null;
             }
         } else {
             /* istanbul ignore else */
-            if (commentLine < trailingLine) {
+            if (lastCommentLine < trailingLine) {
                 peek();
             }
-            if (commentLine === trailingLine && !commentLineEmpty && (alternateCommentMode || commentType === "/")) {
-                ret = commentIsLeading ? null : commentText;
+            comment = comments[trailingLine];
+            delete comments[trailingLine];
+            if (comment && !comment.lineEmpty && (alternateCommentMode || comment.type === "/")) {
+                ret = comment.leading ? null : comment.text;
             }
         }
         return ret;
@@ -7444,8 +7511,6 @@ Object.defineProperty(util, "decorateRoot", {
 "use strict";
 module.exports = LongBits;
 
-var util = require(39);
-
 /**
  * Constructs new long bits.
  * @classdesc Helper class for working with the low and high bits of a 64 bit value.
@@ -7552,7 +7617,7 @@ LongBits.from = function from(value) {
     if (typeof value === "bigint") {
         return LongBits.fromBigInt(value);
     }
-    if (util.isString(value)) {
+    if (typeof value === "string" || value instanceof String) {
         return LongBits.fromBigInt(BigInt(value));
     }
     return value.low || value.high ? new LongBits(value.low >>> 0, value.high >>> 0) : zero;
@@ -7623,7 +7688,7 @@ LongBits.prototype.length = function length() {
          : part2 < 128 ? 9 : 10;
 };
 
-},{"39":39}],39:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 "use strict";
 var util = exports;
 

@@ -1,6 +1,6 @@
 /*!
- * protobuf.js v6.10.2 (c) 2016, daniel wirtz
- * compiled tue, 09 mar 2021 14:56:17 utc
+ * protobuf.js v6.11.0 (c) 2016, daniel wirtz
+ * compiled tue, 07 sep 2021 22:11:49 utc
  * licensed under the bsd-3-clause license
  * see: https://github.com/dcodeio/protobuf.js for details
  */
@@ -304,7 +304,7 @@ function codegen(functionParams, functionName) {
             return "%";
         });
         if (formatOffset !== formatParams.length)
-            throw Error("parameter count mismatch: "+formatStringOrScope);
+            throw Error("parameter count mismatch");
         body.push(formatStringOrScope);
         return Codegen;
     }
@@ -1897,6 +1897,9 @@ function Field(name, id, type, rule, extend, options, comment) {
      * Field rule, if any.
      * @type {string|undefined}
      */
+    if (rule === "proto3_optional") {
+        rule = "optional";
+    }
     this.rule = rule && rule !== "optional" ? rule : undefined; // toJSON
 
     /**
@@ -4467,7 +4470,7 @@ module.exports = {};
 /**
  * Named roots.
  * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
- * Can also be used manually to make roots available accross modules.
+ * Can also be used manually to make roots available across modules.
  * @name roots
  * @type {Object.<string,Root>}
  * @example
@@ -5835,8 +5838,6 @@ Object.defineProperty(util, "decorateRoot", {
 "use strict";
 module.exports = LongBits;
 
-var util = require(35);
-
 /**
  * Constructs new long bits.
  * @classdesc Helper class for working with the low and high bits of a 64 bit value.
@@ -5943,7 +5944,7 @@ LongBits.from = function from(value) {
     if (typeof value === "bigint") {
         return LongBits.fromBigInt(value);
     }
-    if (util.isString(value)) {
+    if (typeof value === "string" || value instanceof String) {
         return LongBits.fromBigInt(BigInt(value));
     }
     return value.low || value.high ? new LongBits(value.low >>> 0, value.high >>> 0) : zero;
@@ -6014,7 +6015,7 @@ LongBits.prototype.length = function length() {
          : part2 < 128 ? 9 : 10;
 };
 
-},{"35":35}],35:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 "use strict";
 var util = exports;
 
